@@ -19,11 +19,13 @@ icons = {'main': 'icons/main.png',
          'volume3': 'icons/volume3.png'}
 
 
-class Player(QtGui.QMainWindow):
+class Player(QtGui.QDialog):
     def __init__(self, parent=None):
         super(Player, self).__init__(parent)
-        # QtGui.QWidget.__init__(self, parent)
-        self.resize(350, 140)
+        self.plist = None
+
+        self.resize(250, 140)
+        self.setFixedSize(self.size())
         screen = QtGui.QDesktopWidget().screenGeometry()
         size = self.geometry()
         self.move((screen.width()-2*size.width())/2,
@@ -44,11 +46,8 @@ class Player(QtGui.QMainWindow):
 
         self.state = QtGui.QLabel()
         self.state.setPixmap(self.smallPixmap(icons['stop_in_circle']))
-        self.title = QtGui.QLabel()
+        self.title = QtGui.QLabel("Simple Player")
         self.time = QtGui.QLabel()
-        choose = QtGui.QPushButton("Choose file")
-        choose.clicked.connect(self.choose_file)
-        choose.setShortcut(QtGui.QKeySequence(QtCore.Qt.Key_C))
         self.progress = QtGui.QSlider(QtCore.Qt.Horizontal)
         self.progress.setMinimum(0)
         self.progress.setMaximum(1000)
@@ -56,6 +55,7 @@ class Player(QtGui.QMainWindow):
                      self.goto)
         self.pl = QtGui.QPushButton('Playlist')
         self.pl.clicked.connect(self.playlist)
+        self.pl.setFocusPolicy(QtCore.Qt.NoFocus)
         self.pl.setShortcut(QtGui.QKeySequence(QtCore.Qt.Key_P))
 
         self.volume = QtGui.QSlider(QtCore.Qt.Horizontal)
@@ -67,7 +67,6 @@ class Player(QtGui.QMainWindow):
         self.volume_label = QtGui.QLabel()
         self.volume_label.setPixmap(self.smallPixmap(icons['volume3']))
 
-        w = QtGui.QWidget()
         hbox1 = QtGui.QHBoxLayout()
         hbox2 = QtGui.QHBoxLayout()
         hbox5 = QtGui.QHBoxLayout()
@@ -78,7 +77,7 @@ class Player(QtGui.QMainWindow):
         hbox2.addWidget(self.title)
         hbox2.addStretch(1)
         hbox2.addWidget(self.time)
-        hbox5.addWidget(choose)
+        hbox5.addStretch(1)
         hbox5.addWidget(self.play_button)
         hbox5.addWidget(stop_button)
 
@@ -87,29 +86,22 @@ class Player(QtGui.QMainWindow):
         vbox.addLayout(hbox2)
         vbox.addWidget(self.progress)
         vbox.addLayout(hbox5)
-        w.setLayout(vbox)
-        self.setCentralWidget(w)
+        self.setLayout(vbox)
 
-        self.media = Phonon.MediaObject(self)
-        output = Phonon.AudioOutput(Phonon.MusicCategory, self)
-        Phonon.createPath(self.media, output)
+        self.media = Phonon.MediaObject()
+        audio = Phonon.AudioOutput(Phonon.MusicCategory, self)
+        Phonon.createPath(self.media, audio)
         self.media.stateChanged.connect(self.handleStateChanged)
         self.media.tick.connect(self.tick)
         self.media.totalTimeChanged.connect(self.set_total_time)
-        self.path = ""
         self.total_time = None
-        self.connect(self.media, QtCore.SIGNAL("metaDataChanged()"),
-                     self.set_name)
 
-        self.progress.setStyleSheet(style.progress_without_handle)
+        self.progress.setStyleSheet(style.progress)
         self.volume.setStyleSheet(style.volume)
         self.play_button.setStyleSheet(style.button)
         stop_button.setStyleSheet(style.button)
-        choose.setStyleSheet(style.choose)
         self.setStyleSheet(style.main)
         self.pl.setStyleSheet(style.playlist_button)
-
-        self.setFixedSize(self.size())
 
     def _play(self):
         if self.media.state() == Phonon.PlayingState:
@@ -126,15 +118,9 @@ class Player(QtGui.QMainWindow):
     def _stop(self):
         if self.volume.value() == 0:
             self.volume_label.setPixmap(self.smallPixmap(icons['volume0']))
+        self.play_button.setIcon(QtGui.QIcon(icons['play']))
         self.media.stop()
-
-    def choose_file(self):
-        self.path = QtGui.QFileDialog.\
-                        getOpenFileName(self, 'Open music file', './music',
-                                        'Music files (*.mp3 *.wav)')
-        if self.path:
-            self.media.setCurrentSource(Phonon.MediaSource(self.path))
-            self.progress.setStyleSheet(style.progress)
+        self.title.setText("Simple Player")
 
     def message(self, name, message):
         reply = QtGui.QMessageBox.question(self, name, message,
@@ -144,8 +130,7 @@ class Player(QtGui.QMainWindow):
     def tick(self, time):
         if self.total_time is None:
             return
-        remain_time = self.total_time - time
-        self.time.setText("%02d:%02d" % self.ms2hms(remain_time))
+        self.time.setText("%02d:%02d" % self.ms2hms(self.total_time - time))
         self.progress.setValue(int(round(time*1000/self.total_time)))
         self.prev_time = time
 
@@ -165,9 +150,7 @@ class Player(QtGui.QMainWindow):
             self.message("Smth strange happened", "Error "+str(new))
 
     def ms2hms(self, time):
-        s = int(round(time/1000))
-        m, s = divmod(s, 60)
-        return m, s
+        return divmod(int(round(time/1000)), 60)
 
     def goto(self):
         if self.total_time is None:
@@ -195,43 +178,87 @@ class Player(QtGui.QMainWindow):
         small_size = QtCore.QSize(20, 20)
         return QtGui.QPixmap(path).scaled(small_size, QtCore.Qt.KeepAspectRatio)
 
-    def set_name(self):
-        metaData = self.media.metaData()
-        title = ''
-        if len(metaData) != 0:
-            if 'ARTIST' in metaData:
-                title += self.media.metaData()['ARTIST'][0]
-            if 'TITLE' in metaData:
-                title += " - "+self.media.metaData()['TITLE'][0]
-        else:
-            title += os.path.splitext(os.path.basename(self.path))[0]
-        self.title.setText(title)
+    def set_song(self, name):
+        self._stop()
+        self.title.setText(name.data())
+        self.media.setCurrentSource(Phonon.MediaSource(
+            self.plist.files[name.row()]))
+        self._play()
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
             self.close()
 
+    def closeEvent(self, event):
+        self.plist.close()
+        event.accept()
+
     def playlist(self, parent=None):
-        playlist = Playlist(parent)
-        playlist.setStyleSheet(style.playlist)
-        playlist.exec_()
+        self.plist.show()
 
 
 class Playlist(QtGui.QDialog):
     def __init__(self, parent=None):
         super(Playlist, self).__init__()
-        self.resize(350, 300)
-        screen = QtGui.QDesktopWidget().screenGeometry()
-        self.move((screen.width()-700)/2,
-                  (screen.height()-85)/2)
-        label = QtGui.QLabel("New Widget")
+        self.player = parent
+        self.resize(250, 300)
+        self.setFixedSize(self.size())
+        self.screen = QtGui.QDesktopWidget().screenGeometry()
+        self._files = []
+        self._titles = []
+
+        choose = QtGui.QPushButton("Choose file")
+        choose.clicked.connect(self.choose_file)
+        choose.setShortcut(QtGui.QKeySequence(QtCore.Qt.Key_C))
+        choose.setStyleSheet(style.choose)
+        self.song_list = QtGui.QListView()
+        self.stringList = QtGui.QStringListModel()
+        self.song_list.setModel(self.stringList)
+        self.connect(self.song_list, QtCore.SIGNAL("clicked(QModelIndex)"),
+                     self.player.set_song)
+        self.label = QtGui.QLabel()
         vbox = QtGui.QVBoxLayout()
-        vbox.addWidget(label)
+        vbox.addWidget(self.song_list)
+        vbox.addWidget(choose)
         self.setLayout(vbox)
 
+    def showEvent(self, event):
+        self.move((self.screen.width()-500)/2,
+                  (self.screen.height()-85)/2)
+
+    @property
+    def files(self):
+        return self._files
+
+    def choose_file(self):
+        path = QtGui.QFileDialog.\
+            getOpenFileName(self, 'Open music file', './music',
+                            'Music files (*.mp3 *.wav)')
+        if path:
+            self._files.append(path)
+            self._titles.append(getTitle(path))
+            self.stringList.setStringList(self._titles)
+
+
+def strip(s):
+    s = ''.join([chr(x) for x in s])
+    while len(s) > 0 and s[-1] in [' ', '\0']:
+        s = s[:-1]
+    return s
+
+
+def getTitle(path):
+    file_ = open(path, 'rb')
+    file_.seek(-128, 2)
+    if file_.read(3) == b"TAG":
+        title, artist = strip(file_.read(30)), strip(file_.read(30))
+        return artist + ' - ' + title
+    else:
+        return os.path.splitext(os.path.basename(path))[0]
 
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
     w = Player()
     w.show()
+    w.plist = Playlist(w)
     app.exec_()
