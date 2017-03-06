@@ -55,12 +55,15 @@ volume = """
     }
 """
 
-choose = """
+volume_button = """
     QPushButton {
-        border: 1px solid #191919;
-        background: #333333;
-        border-radius: 20px;
-        color: #dce1ef;
+        border: 1px solid #4f4f4f;
+        border-radius: 10px;
+        background: #a5a5a5;
+        min-width: 20px;
+        min-height: 20px;
+        max-width: 20px;
+        max-height: 20px;
     }
 """
 
@@ -78,9 +81,6 @@ main = """
         background-color: #b7b7b7;
         color: #111111;
     }
-    QWidget::title {
-        background-color: white;
-    }
 """
 
 playlist = """
@@ -92,7 +92,7 @@ playlist = """
 
 list_view = """
     QListView {
-        background-color: white;
+        background-color: #f7f7f7;
         color: black;
 }
 """
@@ -103,11 +103,6 @@ titlebar = """
         color: white;
         font: 14px;
         height: 10px;
-    }
-
-    QToolButton {
-        height: 5px;
-        background-color: black;
     }
 """
 
